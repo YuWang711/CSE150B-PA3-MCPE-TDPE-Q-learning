@@ -61,7 +61,7 @@ class Agent:
             if tester:
                 self.tester_print(simulation, num_simulation, "MC")
             self.simulator.reset()  # Restart the simulator
-
+            # use     def simulate_one_step(self, action): or simulate_sequence
             # TODO
             # Note: Do not reset the simulator again in the rest of this simulation
             # Hint: Go through game.py file and figure out which functions will be useful
@@ -69,6 +69,16 @@ class Agent:
             #     - DISCOUNT
             #     - self.MC_values     (read comments in self.__init__)
             # remember to update self.MC_values, self.S_MC, self.N_MC for the autograder!
+            # Gs = []
+            # Us = 0
+            episode = self.simulator.simulate_sequence(self.default_policy)
+            previous_state = 0
+            for states in reversed(episode):
+                self.S_MC[states[0]] += states[1] + (previous_state*DISCOUNT)
+                self.N_MC[states[0]] += 1
+                self.MC_values[states[0]] = self.S_MC[states[0]]/self.N_MC[states[0]]
+                previous_state = self.MC_values[states[0]]
+
     
     def TD_run(self, num_simulation, tester=False):
         # Perform num_simulation rounds of simulations in each cycle of the overall game loop
@@ -86,6 +96,27 @@ class Agent:
             #     - DISCOUNT
             #     - self.TD_values  (read comments in self.__init__)
             # remember to update self.TD_values and self.N_TD for the autograder!
+            current_state = self.simulator.state
+            Rs = self.simulator.check_reward()
+            action = self.default_policy(current_state)
+            next_s = self.simulator.simulate_one_step(action)
+            while current_state != None:
+                self.N_TD[current_state] += 1
+                a = self.alpha(self.N_TD[current_state])
+                if next_s[0] != None:
+                    new_val_minus_old_val = Rs + (DISCOUNT*self.TD_values[next_s[0]]) - self.TD_values[current_state]
+                    self.TD_values[current_state] = self.TD_values[current_state] + (a*new_val_minus_old_val)
+                else:
+                    new_val_minus_old_val = Rs + (DISCOUNT*0) - self.TD_values[current_state]
+                    self.TD_values[current_state] = self.TD_values[current_state] + (a*new_val_minus_old_val)  
+                    break
+                Rs = self.simulator.check_reward()
+                current_state = next_s[0]
+                action = self.default_policy(current_state)
+                next_s = self.simulator.simulate_one_step(action)
+
+
+
                 
     def Q_run(self, num_simulation, tester=False):
         # Perform num_simulation rounds of simulations in each cycle of the overall game loop
@@ -104,10 +135,37 @@ class Agent:
             #     - DISCOUNT
             #     - self.Q_values  (read comments in self.__init__)
             # remember to update self.Q_values, self.N_Q for the autograder!
+            current_state = self.simulator.state
+            Rs = self.simulator.check_reward()
+            eps = 0.4
+            action = self.pick_action(current_state, eps)
+            next_s = self.simulator.simulate_one_step(action)
+            while current_state != None:
+                self.N_Q[current_state] += 1
+                a = self.alpha(self.N_Q[current_state])
+                if next_s[0] != None:
+                    max_Q = max(self.Q_values[next_s[0]][1], self.Q_values[next_s[0]][0])
+                    new_val_minus_old_val = Rs + (DISCOUNT*max_Q) - self.Q_values[current_state][action]
+                    self.Q_values[current_state][action] = self.Q_values[current_state][action] + (a*new_val_minus_old_val)
+                else:
+                    new_val_minus_old_val = Rs + (DISCOUNT*0) - self.Q_values[current_state][action]
+                    self.Q_values[current_state][action]= self.Q_values[current_state][action]+ (a*new_val_minus_old_val) 
+                    break
+                Rs = self.simulator.check_reward()
+                current_state = self.simulator.state
+                action = self.pick_action(current_state, eps)
+                next_s = self.simulator.simulate_one_step(action)
 
     def pick_action(self, s, epsilon):
         # TODO: Replace the following random return value with the epsilon-greedy strategy
-        return random.randint(0, 1)
+        if random.random() < epsilon:
+            return random.randint(0,1)
+        else:
+            if self.Q_values[s][0] > self.Q_values[s][1]:
+                return 0
+            else:
+                return 1
+            #return int(max(self.Q_values[s][0], self.Q_values[s][1]))
 
     #Note: do not modify
     def autoplay_decision(self, state):
@@ -123,7 +181,7 @@ class Agent:
         with open(filename, "w") as file:
             for table in [self.MC_values, self.TD_values, self.Q_values, self.S_MC, self.N_MC, self.N_TD, self.N_Q]:
                 for key in table:
-                    key_str = str(key).replace(" ", "")
+                    key_str = str(key).replace(" ", "") 
                     entry_str = str(table[key]).replace(" ", "")
                     file.write(f"{key_str} {entry_str}\n")
                 file.write("\n")
